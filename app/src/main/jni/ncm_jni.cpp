@@ -67,8 +67,8 @@ Java_com_ncmdump_app_NcmCrypt_decryptBatch(JNIEnv *env, jobject thiz,
 }
 
 /**
- * 获取解密后的元数据（歌曲名/艺术家/专辑/格式）
- * 返回格式：name|artist|album|format
+ * 获取 ncm 文件的元数据 JSON
+ * 包含 name/artist/album/format/duration/bitrate
  */
 JNIEXPORT jstring JNICALL
 Java_com_ncmdump_app_NcmCrypt_getMetadata(JNIEnv *env, jobject thiz, jstring inputPath) {
@@ -76,9 +76,46 @@ Java_com_ncmdump_app_NcmCrypt_getMetadata(JNIEnv *env, jobject thiz, jstring inp
     std::string result;
     try {
         NeteaseCrypt crypt(input);
-        // 构造后元数据已解析，但需要 Dump 才会有格式信息
-        // 这里只返回已解析的元数据
-        result = "metadata_parsed";
+        result = crypt.GetMetadataJson();
+    } catch (...) {
+        result = "";
+    }
+    env->ReleaseStringUTFChars(inputPath, input);
+    return env->NewStringUTF(result.c_str());
+}
+
+/**
+ * 获取 ncm 文件的封面图片字节数组
+ */
+JNIEXPORT jbyteArray JNICALL
+Java_com_ncmdump_app_NcmCrypt_getCoverImage(JNIEnv *env, jobject thiz, jstring inputPath) {
+    const char *input = env->GetStringUTFChars(inputPath, nullptr);
+    jbyteArray result = env->NewByteArray(0);
+    try {
+        NeteaseCrypt crypt(input);
+        const std::string& imgData = crypt.GetCoverImage();
+        if (!imgData.empty()) {
+            result = env->NewByteArray(imgData.length());
+            env->SetByteArrayRegion(result, 0, imgData.length(),
+                                     reinterpret_cast<const jbyte*>(imgData.data()));
+        }
+    } catch (...) {
+        // 返回空数组
+    }
+    env->ReleaseStringUTFChars(inputPath, input);
+    return result;
+}
+
+/**
+ * 获取封面 MIME 类型（image/png 或 image/jpeg）
+ */
+JNIEXPORT jstring JNICALL
+Java_com_ncmdump_app_NcmCrypt_getCoverMime(JNIEnv *env, jobject thiz, jstring inputPath) {
+    const char *input = env->GetStringUTFChars(inputPath, nullptr);
+    std::string result;
+    try {
+        NeteaseCrypt crypt(input);
+        result = crypt.GetCoverMime();
     } catch (...) {
         result = "";
     }

@@ -276,8 +276,21 @@ class MainActivity : AppCompatActivity() {
                 val cachePath = copyUriToCache(uri)
                 if (cachePath != null) {
                     try {
+                        // 先获取元数据和封面（解密前从 ncm 文件读取）
+                        val metadataJson = NcmCrypt.getMetadata(cachePath)
+                        val coverBytes = NcmCrypt.getCoverImage(cachePath)
+                        val coverMime = NcmCrypt.getCoverMime(cachePath)
+
                         val result = NcmCrypt.decrypt(cachePath, outputDir)
                         if (result.isNotEmpty()) {
+                            // 写入元数据和封面
+                            try {
+                                val json = org.json.JSONObject(metadataJson)
+                                val title = json.optString("name", "")
+                                val artist = json.optString("artist", "")
+                                val album = json.optString("album", "")
+                                MetadataWriter.write(result, title, artist, album, coverBytes, coverMime)
+                            } catch (_: Exception) {}
                             success++
                         } else {
                             failed++

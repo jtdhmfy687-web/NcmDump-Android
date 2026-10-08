@@ -350,3 +350,44 @@ NeteaseCrypt::NeteaseCrypt(std::string const &path)
     }
     mFile.seekg(cover_frame_len - n, mFile.cur);
 }
+
+std::string NeteaseCrypt::GetMetadataJson() const
+{
+    cJSON* root = cJSON_CreateObject();
+    if (mMetaData != nullptr)
+    {
+        cJSON_AddStringToObject(root, "name", mMetaData->name().c_str());
+        cJSON_AddStringToObject(root, "artist", mMetaData->artist().c_str());
+        cJSON_AddStringToObject(root, "album", mMetaData->album().c_str());
+        cJSON_AddStringToObject(root, "format", mMetaData->format().c_str());
+        cJSON_AddNumberToObject(root, "duration", mMetaData->duration());
+        cJSON_AddNumberToObject(root, "bitrate", mMetaData->bitrate());
+    }
+    else
+    {
+        cJSON_AddStringToObject(root, "name", "");
+        cJSON_AddStringToObject(root, "artist", "");
+        cJSON_AddStringToObject(root, "album", "");
+        cJSON_AddStringToObject(root, "format", "");
+        cJSON_AddNumberToObject(root, "duration", 0);
+        cJSON_AddNumberToObject(root, "bitrate", 0);
+    }
+    char* jsonStr = cJSON_PrintUnformatted(root);
+    std::string result(jsonStr ? jsonStr : "{}");
+    free(jsonStr);
+    cJSON_Delete(root);
+    return result;
+}
+
+std::string NeteaseCrypt::GetCoverMime() const
+{
+    if (mImageData.empty())
+    {
+        return "";
+    }
+    if (mImageData.length() >= 8 && memcmp(mImageData.c_str(), mPng, 8) == 0)
+    {
+        return "image/png";
+    }
+    return "image/jpeg";
+}

@@ -61,6 +61,13 @@ public:
 	const std::string& filepath() const { return mFilepath; }
 	const std::filesystem::path dumpFilepath() const { return mDumpFilepath; }
 
+	// 获取元数据 JSON（name/artist/album/format/duration/bitrate）
+	std::string GetMetadataJson() const;
+	// 获取封面图片原始字节
+	const std::string& GetCoverImage() const { return mImageData; }
+	// 获取封面 MIME 类型
+	std::string GetCoverMime() const;
+
 public:
 	NeteaseCrypt(std::string const&);
 	~NeteaseCrypt();
