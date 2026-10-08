@@ -62,12 +62,15 @@ class MainActivity : AppCompatActivity() {
                 )
             } catch (_: Exception) {}
             outputDirUri = it
-            // 保存输出目录路径
+            // 同时保存 Uri 字符串和真实路径
             val path = resolveTreeUriToPath(it)
+            val editor = prefs.edit()
+            editor.putString("last_output_uri", it.toString())
             if (path.isNotEmpty()) {
                 lastOutputPath = path
-                prefs.edit().putString("last_output_dir", path).apply()
+                editor.putString("last_output_dir", path)
             }
+            editor.apply()
             tvStatus.text = "输出目录: ${getDocumentFileName(it)}"
         }
     }
@@ -89,6 +92,13 @@ class MainActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences("ncmdump", MODE_PRIVATE)
         lastOutputPath = prefs.getString("last_output_dir", "") ?: ""
+        // 恢复上次的输出目录 Uri
+        val savedUriStr = prefs.getString("last_output_uri", "")
+        if (!savedUriStr.isNullOrEmpty()) {
+            try {
+                outputDirUri = Uri.parse(savedUriStr)
+            } catch (_: Exception) {}
+        }
 
         btnSelect = findViewById(R.id.btnSelect)
         btnSelectDir = findViewById(R.id.btnSelectDir)
@@ -266,33 +276,46 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 兜底：用保存的 Uri 重新解析路径
         outputDirUri?.let { uri ->
-            try {
-                val docId = DocumentsContract.getTreeDocumentId(uri)
-                if (docId.startsWith("primary:")) {
-                    val relPath = docId.substringAfter("primary:")
-                    val path = "${Environment.getExternalStorageDirectory()}/$relPath"
-                    val dir = java.io.File(path)
-                    if (dir.exists() && dir.isDirectory) {
-                        return path
-                    }
+            val path = resolveTreeUriToPath(uri)
+            if (path.isNotEmpty()) {
+                val dir = java.io.File(path)
+                if (dir.exists() && dir.isDirectory) {
+                    lastOutputPath = path
+                    return path
                 }
-            } catch (_: Exception) {}
+            }
         }
+
         return defaultDir
     }
 
     /**
      * 将 SAF Tree Uri 解析为真实文件路径
+     * 支持内置存储(primary:)和SD卡(xxxx-xxxx:)
      */
     private fun resolveTreeUriToPath(uri: Uri): String {
         return try {
             val docId = DocumentsContract.getTreeDocumentId(uri)
-            if (docId.startsWith("primary:")) {
-                val relPath = docId.substringAfter("primary:")
-                "${Environment.getExternalStorageDirectory()}/$relPath"
-            } else {
-                ""
+            val colonIndex = docId.indexOf(':')
+            if (colonIndex < 0) return ""
+
+            val volume = docId.substring(0, colonIndex)
+            val relPath = docId.substring(colonIndex + 1)
+
+            when {
+                volume == "primary" -> {
+                    "${Environment.getExternalStorageDirectory()}/$relPath"
+                }
+                volume.matches(Regex("[A-F0-9]{4}-[A-F0-9]{4}")) -> {
+                    // SD 卡路径
+                    "/storage/$volume/$relPath"
+                }
+                else -> {
+                    // 尝试通用方式
+                    "/storage/$volume/$relPath"
+                }
             }
         } catch (_: Exception) {
             ""
@@ -321,22 +344,27 @@ class MainActivity : AppCompatActivity() {
 
                         val result = NcmCrypt.decrypt(cachePath, outputDir)
                         if (result.isNotEmpty()) {
-                            // 写入元数据、封面和歌词（全部独立异常保护，单项失败不影响）
+                            // 写入元数据和封面（歌词单独生成 .lrc 文件）
                             try {
                                 val json = org.json.JSONObject(metadataJson)
                                 val title = json.optString("name", "")
                                 val artist = json.optString("artist", "")
                                 val album = json.optString("album", "")
 
-                                // 爬取歌词（网络操作，超时8秒）
-                                var lyrics: String? = null
+                                MetadataWriter.write(result, title, artist, album, coverBytes, coverMime, null)
+
+                                // 爬取歌词并单独生成 .lrc 文件
                                 try {
                                     if (title.isNotEmpty()) {
-                                        lyrics = LyricFetcher.fetchLyrics(title, artist)
+                                        val lyrics = LyricFetcher.fetchLyrics(title, artist)
+                                        if (!lyrics.isNullOrEmpty()) {
+                                            val audioFile = java.io.File(result)
+                                            val lrcName = audioFile.nameWithoutExtension + ".lrc"
+                                            val lrcFile = java.io.File(audioFile.parentFile, lrcName)
+                                            lrcFile.writeText(lyrics, Charsets.UTF_8)
+                                        }
                                     }
                                 } catch (_: Exception) {}
-
-                                MetadataWriter.write(result, title, artist, album, coverBytes, coverMime, lyrics)
                             } catch (_: Exception) {}
                             success++
                         } else {
