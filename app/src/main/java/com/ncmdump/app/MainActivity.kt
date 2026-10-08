@@ -2,6 +2,7 @@ package com.ncmdump.app
 
 import android.Manifest
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -32,8 +33,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var layoutControls: View
 
+    private lateinit var prefs: SharedPreferences
+
     private val selectedFiles = mutableListOf<Uri>()
     private var outputDirUri: Uri? = null
+    private var lastOutputPath: String = ""
 
     // 选择多个 ncm 文件
     private val pickFiles = registerForActivityResult(
@@ -58,6 +62,12 @@ class MainActivity : AppCompatActivity() {
                 )
             } catch (_: Exception) {}
             outputDirUri = it
+            // 保存输出目录路径
+            val path = resolveTreeUriToPath(it)
+            if (path.isNotEmpty()) {
+                lastOutputPath = path
+                prefs.edit().putString("last_output_dir", path).apply()
+            }
             tvStatus.text = "输出目录: ${getDocumentFileName(it)}"
         }
     }
@@ -76,6 +86,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        prefs = getSharedPreferences("ncmdump", MODE_PRIVATE)
+        lastOutputPath = prefs.getString("last_output_dir", "") ?: ""
 
         btnSelect = findViewById(R.id.btnSelect)
         btnSelectDir = findViewById(R.id.btnSelectDir)
@@ -245,6 +258,14 @@ class MainActivity : AppCompatActivity() {
     private fun getOutputDirPath(): String {
         val defaultDir = getExternalFilesDir(null)?.absolutePath ?: cacheDir.absolutePath
 
+        // 优先使用上次保存的输出目录
+        if (lastOutputPath.isNotEmpty()) {
+            val dir = java.io.File(lastOutputPath)
+            if (dir.exists() && dir.isDirectory) {
+                return lastOutputPath
+            }
+        }
+
         outputDirUri?.let { uri ->
             try {
                 val docId = DocumentsContract.getTreeDocumentId(uri)
@@ -259,6 +280,23 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {}
         }
         return defaultDir
+    }
+
+    /**
+     * 将 SAF Tree Uri 解析为真实文件路径
+     */
+    private fun resolveTreeUriToPath(uri: Uri): String {
+        return try {
+            val docId = DocumentsContract.getTreeDocumentId(uri)
+            if (docId.startsWith("primary:")) {
+                val relPath = docId.substringAfter("primary:")
+                "${Environment.getExternalStorageDirectory()}/$relPath"
+            } else {
+                ""
+            }
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private fun startDecrypt() {
@@ -283,13 +321,22 @@ class MainActivity : AppCompatActivity() {
 
                         val result = NcmCrypt.decrypt(cachePath, outputDir)
                         if (result.isNotEmpty()) {
-                            // 写入元数据和封面
+                            // 写入元数据、封面和歌词（全部独立异常保护，单项失败不影响）
                             try {
                                 val json = org.json.JSONObject(metadataJson)
                                 val title = json.optString("name", "")
                                 val artist = json.optString("artist", "")
                                 val album = json.optString("album", "")
-                                MetadataWriter.write(result, title, artist, album, coverBytes, coverMime)
+
+                                // 爬取歌词（网络操作，超时8秒）
+                                var lyrics: String? = null
+                                try {
+                                    if (title.isNotEmpty()) {
+                                        lyrics = LyricFetcher.fetchLyrics(title, artist)
+                                    }
+                                } catch (_: Exception) {}
+
+                                MetadataWriter.write(result, title, artist, album, coverBytes, coverMime, lyrics)
                             } catch (_: Exception) {}
                             success++
                         } else {
