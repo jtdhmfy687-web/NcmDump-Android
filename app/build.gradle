@@ -22,9 +22,19 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            storeFile file("../release.jks")
+            storePassword "ncmdump123"
+            keyAlias "ncmdump"
+            keyPassword "ncmdump123"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

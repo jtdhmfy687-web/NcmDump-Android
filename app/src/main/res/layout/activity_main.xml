@@ -101,6 +101,16 @@
                 android:textSize="13sp"
                 android:textColor="#555555" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="by.muling"
+                android:textSize="12sp"
+                android:textColor="#AAAAAA"
+                android:gravity="center"
+                android:layout_marginTop="24dp"
+                android:alpha="0.6" />
+
         </LinearLayout>
 
     </LinearLayout>
