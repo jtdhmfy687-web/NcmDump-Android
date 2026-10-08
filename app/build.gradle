@@ -11,8 +11,8 @@ android {
         applicationId "com.ncmdump.app"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
 
         externalNativeBuild {
             cmake {
@@ -52,6 +52,13 @@ android {
         cmake {
             path "src/main/jni/CMakeLists.txt"
             version "3.22.1"
+        }
+    }
+
+    // APK 输出文件名
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "网易云ncm解密-v${variant.versionName}.apk"
         }
     }
 }
