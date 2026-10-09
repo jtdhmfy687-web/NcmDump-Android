@@ -1,5 +1,6 @@
 package com.ncmdump.app
 
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -10,20 +11,21 @@ import androidx.fragment.app.Fragment
 
 class AudioEditFragment : Fragment() {
 
-    private lateinit var tabMode: TabHost
     private lateinit var btnSelectTrim: Button
     private lateinit var btnSelectMerge: Button
     private lateinit var btnTrim: Button
     private lateinit var btnMerge: Button
-    private lateinit var etStartTime: EditText
-    private lateinit var etDuration: EditText
+    private lateinit var trimView: AudioTrimView
     private lateinit var tvTrimFile: TextView
     private lateinit var tvMergeFiles: TextView
     private lateinit var tvStatus: TextView
     private lateinit var progressBar: ProgressBar
+    private lateinit var layoutTrim: View
 
     private var trimFile: Uri? = null
     private val mergeFiles = mutableListOf<Uri>()
+    private var trimStartMs: Long = 0
+    private var trimEndMs: Long = 0
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -38,12 +40,17 @@ class AudioEditFragment : Fragment() {
         btnSelectMerge = view.findViewById(R.id.btnSelectMerge)
         btnTrim = view.findViewById(R.id.btnTrim)
         btnMerge = view.findViewById(R.id.btnMerge)
-        etStartTime = view.findViewById(R.id.etStartTime)
-        etDuration = view.findViewById(R.id.etDuration)
+        trimView = view.findViewById(R.id.trimView)
         tvTrimFile = view.findViewById(R.id.tvTrimFile)
         tvMergeFiles = view.findViewById(R.id.tvMergeFiles)
         tvStatus = view.findViewById(R.id.tvStatus)
         progressBar = view.findViewById(R.id.progressBar)
+        layoutTrim = view.findViewById(R.id.layoutTrim)
+
+        trimView.onTrimChanged = { start, end ->
+            trimStartMs = start
+            trimEndMs = end
+        }
 
         btnSelectTrim.setOnClickListener {
             try { (requireActivity() as MainActivity).openFilePicker() }
@@ -61,9 +68,11 @@ class AudioEditFragment : Fragment() {
                 Toast.makeText(requireContext(), "请先选择音频文件", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            val startTime = etStartTime.text.toString().ifEmpty { "00:00:00" }
-            val duration = etDuration.text.toString().ifEmpty { "00:00:10" }
-            startTrim(file, startTime, duration)
+            if (trimEndMs <= trimStartMs) {
+                Toast.makeText(requireContext(), "请选择有效区间", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            startTrim(file)
         }
 
         btnMerge.setOnClickListener {
@@ -76,11 +85,11 @@ class AudioEditFragment : Fragment() {
     }
 
     fun onFileSelected(uri: Uri) {
-        // 根据当前可见的按钮判断是剪辑还是合并
-        // 简单处理：如果剪辑文件为空，设置为剪辑文件；否则添加到合并列表
         if (trimFile == null) {
             trimFile = uri
-            tvTrimFile.text = "已选择: ${FileUtils.getFileName(requireContext(), uri)}"
+            tvTrimFile.text = FileUtils.getFileName(requireContext(), uri)
+            loadDuration(uri)
+            layoutTrim.visibility = View.VISIBLE
         } else {
             mergeFiles.add(uri)
             updateMergeList()
@@ -93,6 +102,23 @@ class AudioEditFragment : Fragment() {
         updateMergeList()
     }
 
+    private fun loadDuration(uri: Uri) {
+        try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(requireContext(), uri)
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val duration = durationStr?.toLongOrNull() ?: 0
+            retriever.release()
+            if (duration > 0) {
+                trimView.durationMs = duration
+                trimStartMs = 0
+                trimEndMs = duration
+            }
+        } catch (e: Exception) {
+            Toast.makeText(requireContext(), "无法获取音频时长", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun updateMergeList() {
         val sb = StringBuilder("已选择 ${mergeFiles.size} 个文件:\n")
         mergeFiles.forEachIndexed { index, uri ->
@@ -101,10 +127,13 @@ class AudioEditFragment : Fragment() {
         tvMergeFiles.text = sb.toString()
     }
 
-    private fun startTrim(inputUri: Uri, startTime: String, duration: String) {
+    private fun startTrim(inputUri: Uri) {
         btnTrim.isEnabled = false
         progressBar.visibility = View.VISIBLE
         tvStatus.text = "正在剪辑..."
+
+        val startTime = formatTime(trimStartMs)
+        val duration = formatTime(trimEndMs - trimStartMs)
 
         FfmpegHelper.trimAudio(requireContext(), inputUri, startTime, duration) { success, result ->
             requireActivity().runOnUiThread {
@@ -139,5 +168,14 @@ class AudioEditFragment : Fragment() {
                 }
             }
         }
+    }
+
+    private fun formatTime(ms: Long): String {
+        val totalSec = ms / 1000
+        val h = totalSec / 3600
+        val m = (totalSec % 3600) / 60
+        val s = totalSec % 60
+        return if (h > 0) String.format("%02d:%02d:%02d", h, m, s)
+               else String.format("%02d:%02d", m, s)
     }
 }

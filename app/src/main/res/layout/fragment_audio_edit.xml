@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
-    android:background="@color/bg_main">
+    android:background="@android:color/transparent">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -21,7 +21,6 @@
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
-        <!-- 剪辑部分 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -63,54 +62,39 @@
                     android:textSize="13sp"
                     android:layout_marginBottom="12dp" />
 
-                <TextView
+                <LinearLayout
+                    android:id="@+id/layoutTrim"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="开始时间 (格式: 00:00:00)"
-                    android:textColor="@color/text_hint"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
+                    android:orientation="vertical"
+                    android:visibility="gone">
 
-                <EditText
-                    android:id="@+id/etStartTime"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:hint="00:00:00"
-                    android:inputType="text"
-                    android:background="@color/bg_input"
-                    android:paddingHorizontal="12dp"
-                    android:layout_marginBottom="12dp" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="拖拽选择区间"
+                        android:textColor="@color/text_hint"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="8dp" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="持续时长 (格式: 00:00:10)"
-                    android:textColor="@color/text_hint"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
+                    <com.ncmdump.app.AudioTrimView
+                        android:id="@+id/trimView"
+                        android:layout_width="match_parent"
+                        android:layout_height="80dp"
+                        android:layout_marginBottom="12dp" />
 
-                <EditText
-                    android:id="@+id/etDuration"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:hint="00:00:10"
-                    android:inputType="text"
-                    android:background="@color/bg_input"
-                    android:paddingHorizontal="12dp"
-                    android:layout_marginBottom="12dp" />
-
-                <Button
-                    android:id="@+id/btnTrim"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:text="开始剪辑"
-                    android:backgroundTint="@color/primary"
-                    android:textColor="#FFFFFF"
-                    android:textSize="14sp" />
+                    <Button
+                        android:id="@+id/btnTrim"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="开始剪辑"
+                        android:backgroundTint="@color/primary"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp" />
+                </LinearLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- 合并部分 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

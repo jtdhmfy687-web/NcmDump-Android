@@ -169,7 +169,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyBackgroundToView(view: View, bgUri: Uri?) {
+    fun applyBackgroundToView(view: View, bgUri: Uri?) {
         val maskAlpha = 0
 
         if (bgUri != null) {
