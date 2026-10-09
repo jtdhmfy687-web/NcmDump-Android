@@ -1,54 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#F0F2F5"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp"
-        android:gravity="center_horizontal">
+        android:padding="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="NcmDump"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="网易云 ncm 格式解密工具"
-            android:textSize="14sp"
-            android:textColor="#888888"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 权限申请区域 -->
-        <TextView
-            android:id="@+id/tvPermissionHint"
+        <!-- 标题区域 -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="需要「所有文件访问权限」才能读取和解密 ncm 文件"
-            android:textSize="15sp"
-            android:textColor="#D32F2F"
-            android:gravity="center"
-            android:lineSpacingExtra="6dp"
+            android:orientation="vertical"
             android:layout_marginBottom="16dp"
-            android:visibility="gone" />
+            android:paddingTop="8dp">
 
-        <Button
-            android:id="@+id/btnGrantPermission"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="网易云ncm解密"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="多媒体工具箱 v1.4"
+                android:textSize="12sp"
+                android:textColor="#999999"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+
+        <!-- 权限申请卡片 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardPermission"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="授予所有文件访问权限"
-            android:backgroundTint="#FF6B6B"
-            android:textColor="#FFFFFF"
-            android:layout_marginBottom="24dp"
-            android:visibility="gone" />
+            app:cardCornerRadius="14dp"
+            app:cardElevation="3dp"
+            app:cardBackgroundColor="#FFFFFF"
+            android:layout_marginBottom="14dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:id="@+id/tvPermissionHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="需要「所有文件访问权限」才能读取和解密 ncm 文件\n\n请点击下方按钮，在设置中允许访问所有文件"
+                    android:textSize="14sp"
+                    android:textColor="#D32F2F"
+                    android:lineSpacingExtra="4dp"
+                    android:layout_marginBottom="14dp" />
+
+                <Button
+                    android:id="@+id/btnGrantPermission"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="授予所有文件访问权限"
+                    android:textSize="15sp"
+                    android:backgroundTint="#FF6B6B"
+                    android:textColor="#FFFFFF" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
 
         <!-- 功能控制区域 -->
         <LinearLayout
@@ -58,58 +83,158 @@
             android:orientation="vertical"
             android:visibility="visible">
 
-            <Button
-                android:id="@+id/btnSelect"
+            <!-- NCM解密卡片 -->
+            <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="选择 ncm 文件"
-                android:layout_marginBottom="12dp" />
+                app:cardCornerRadius="14dp"
+                app:cardElevation="3dp"
+                app:cardBackgroundColor="#FFFFFF"
+                android:layout_marginBottom="14dp">
 
-            <Button
-                android:id="@+id/btnSelectDir"
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="NCM 解密"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:textColor="#1A1A1A"
+                        android:layout_marginBottom="14dp" />
+
+                    <Button
+                        android:id="@+id/btnSelect"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="选择 ncm 文件"
+                        android:textSize="14sp"
+                        android:backgroundTint="#4A90D9"
+                        android:textColor="#FFFFFF"
+                        android:layout_marginBottom="10dp" />
+
+                    <Button
+                        android:id="@+id/btnSelectDir"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:text="选择输出目录（可选）"
+                        android:textSize="13sp"
+                        android:backgroundTint="#E8E8E8"
+                        android:textColor="#555555"
+                        android:layout_marginBottom="10dp" />
+
+                    <Button
+                        android:id="@+id/btnDecrypt"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:text="开始解密"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#4CAF50"
+                        android:textColor="#FFFFFF" />
+
+                    <ProgressBar
+                        android:id="@+id/progressBar"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp" />
+
+                    <TextView
+                        android:id="@+id/tvStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="等待选择文件..."
+                        android:textSize="13sp"
+                        android:textColor="#666666"
+                        android:layout_marginTop="8dp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- 文件列表卡片 -->
+            <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="选择输出目录（可选）"
-                android:layout_marginBottom="12dp" />
+                app:cardCornerRadius="14dp"
+                app:cardElevation="3dp"
+                app:cardBackgroundColor="#FFFFFF"
+                android:layout_marginBottom="14dp">
 
-            <Button
-                android:id="@+id/btnDecrypt"
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="已选文件"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="#1A1A1A"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/tvFileList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="12sp"
+                        android:textColor="#777777"
+                        android:lineSpacingExtra="3dp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- 更多工具卡片 -->
+            <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="开始解密"
-                android:layout_marginBottom="20dp" />
+                app:cardCornerRadius="14dp"
+                app:cardElevation="3dp"
+                app:cardBackgroundColor="#FFFFFF"
+                android:layout_marginBottom="14dp">
 
-            <ProgressBar
-                android:id="@+id/progressBar"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
 
-            <TextView
-                android:id="@+id/tvStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="等待选择文件..."
-                android:textSize="14sp"
-                android:layout_marginBottom="16dp" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="更多工具"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="#1A1A1A"
+                        android:layout_marginBottom="12dp" />
 
-            <TextView
-                android:id="@+id/tvFileList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="13sp"
-                android:textColor="#555555" />
+                    <Button
+                        android:id="@+id/btnBili"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="哔哩哔哩视频解析"
+                        android:textSize="14sp"
+                        android:backgroundTint="#FB7299"
+                        android:textColor="#FFFFFF"
+                        android:drawablePadding="8dp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
 
+            <!-- 水印 -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="by.muling"
-                android:textSize="12sp"
-                android:textColor="#AAAAAA"
+                android:textSize="11sp"
+                android:textColor="#BBBBBB"
                 android:gravity="center"
-                android:layout_marginTop="24dp"
-                android:alpha="0.6" />
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="12dp" />
 
         </LinearLayout>
 

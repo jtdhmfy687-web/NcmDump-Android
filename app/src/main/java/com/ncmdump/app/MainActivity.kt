@@ -27,11 +27,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSelectDir: Button
     private lateinit var btnDecrypt: Button
     private lateinit var btnGrantPermission: Button
+    private lateinit var btnBili: Button
     private lateinit var tvStatus: TextView
     private lateinit var tvFileList: TextView
     private lateinit var tvPermissionHint: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var layoutControls: View
+    private lateinit var cardPermission: View
 
     private lateinit var prefs: SharedPreferences
 
@@ -104,14 +106,20 @@ class MainActivity : AppCompatActivity() {
         btnSelectDir = findViewById(R.id.btnSelectDir)
         btnDecrypt = findViewById(R.id.btnDecrypt)
         btnGrantPermission = findViewById(R.id.btnGrantPermission)
+        btnBili = findViewById(R.id.btnBili)
         tvStatus = findViewById(R.id.tvStatus)
         tvFileList = findViewById(R.id.tvFileList)
         tvPermissionHint = findViewById(R.id.tvPermissionHint)
         progressBar = findViewById(R.id.progressBar)
         layoutControls = findViewById(R.id.layoutControls)
+        cardPermission = findViewById(R.id.cardPermission)
 
         btnGrantPermission.setOnClickListener {
             requestAllFilesPermission()
+        }
+
+        btnBili.setOnClickListener {
+            startActivity(Intent(this, BiliActivity::class.java))
         }
 
         btnSelect.setOnClickListener {
@@ -208,15 +216,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showPermissionRequired() {
-        tvPermissionHint.visibility = View.VISIBLE
-        btnGrantPermission.visibility = View.VISIBLE
+        cardPermission.visibility = View.VISIBLE
         layoutControls.visibility = View.GONE
-        tvPermissionHint.text = "需要「所有文件访问权限」才能读取和解密 ncm 文件\n\n请点击下方按钮，在设置中允许 NcmDump 访问所有文件"
+        tvPermissionHint.text = "需要「所有文件访问权限」才能读取和解密 ncm 文件\n\n请点击下方按钮，在设置中允许访问所有文件"
     }
 
     private fun onPermissionGranted() {
-        tvPermissionHint.visibility = View.GONE
-        btnGrantPermission.visibility = View.GONE
+        cardPermission.visibility = View.GONE
         layoutControls.visibility = View.VISIBLE
         if (tvStatus.text.isNullOrEmpty() || tvStatus.text == "等待选择文件...") {
             tvStatus.text = "权限已授予，请选择 ncm 文件"
@@ -344,14 +350,19 @@ class MainActivity : AppCompatActivity() {
 
                         val result = NcmCrypt.decrypt(cachePath, outputDir)
                         if (result.isNotEmpty()) {
-                            // 写入元数据和封面（歌词单独生成 .lrc 文件）
+                            // 后处理：元数据/封面/歌词（全部用 Throwable 捕获，防止 OOM 闪退）
                             try {
                                 val json = org.json.JSONObject(metadataJson)
                                 val title = json.optString("name", "")
                                 val artist = json.optString("artist", "")
                                 val album = json.optString("album", "")
 
-                                MetadataWriter.write(result, title, artist, album, coverBytes, coverMime, null)
+                                // 封面过大时跳过写入（防止 OOM）
+                                val safeCover = if (coverBytes.size > 10 * 1024 * 1024) null else coverBytes
+
+                                try {
+                                    MetadataWriter.write(result, title, artist, album, safeCover, coverMime, null)
+                                } catch (_: Throwable) {}
 
                                 // 爬取歌词并单独生成 .lrc 文件
                                 try {
@@ -364,8 +375,8 @@ class MainActivity : AppCompatActivity() {
                                             lrcFile.writeText(lyrics, Charsets.UTF_8)
                                         }
                                     }
-                                } catch (_: Exception) {}
-                            } catch (_: Exception) {}
+                                } catch (_: Throwable) {}
+                            } catch (_: Throwable) {}
                             success++
                         } else {
                             failed++
@@ -375,7 +386,7 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread {
                             Toast.makeText(this@MainActivity, "原生库加载失败", Toast.LENGTH_SHORT).show()
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         failed++
                     } finally {
                         try {
