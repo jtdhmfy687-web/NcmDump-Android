@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_main">#121212</color>
+    <color name="bg_card">#E01E1E1E</color>
+    <color name="bg_button">#2A2A2A</color>
+    <color name="bg_button_pressed">#3A3A3A</color>
+    <color name="primary">#7C6BC4</color>
+    <color name="primary_dark">#5D4FA3</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#AAAAAA</color>
+    <color name="text_hint">#666666</color>
+    <color name="accent_blue">#5B7FC4</color>
+    <color name="success">#6BAF7C</color>
+    <color name="warning">#E0A050</color>
+    <color name="nav_bg">#33FFFFFF</color>
+</resources>

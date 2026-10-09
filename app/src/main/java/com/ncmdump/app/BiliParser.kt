@@ -4,20 +4,27 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.security.MessageDigest
+import java.util.regex.Pattern
 
 /**
  * 哔哩哔哩视频解析工具
+ * playurl API 无需 wbi 签名，带 Referer+Origin 头即可
  */
 object BiliParser {
 
-    private const val UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-    private const val REFERER = "https://www.bilibili.com"
+    private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+    private const val REFERER = "https://www.bilibili.com/"
+    private const val ORIGIN = "https://www.bilibili.com"
+    private const val VIEW_API = "https://api.bilibili.com/x/web-interface/view?"
+    private const val PLAY_API = "https://api.bilibili.com/x/player/playurl?fnval=16&fnver=0&fourk=1"
 
-    // wbi 混淆表
-    private val MIXIN_KEY_ENC_TAB = intArrayOf(
-        46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52
-    )
+    private val BV_PATTERN = Pattern.compile("(?i)(BV[0-9A-Za-z]{10})")
+    private val AV_PATTERN = Pattern.compile("(?i)(?<![0-9A-Za-z])av(\\d+)(?![0-9A-Za-z])")
+    private val B23_PATTERN = Pattern.compile("https?://b23\\.tv/[0-9A-Za-z]+", Pattern.CASE_INSENSITIVE)
+    private val BILI_URL_PATTERN = Pattern.compile("https?://(?:www\\.)?bilibili\\.com/video/[^\\s]+", Pattern.CASE_INSENSITIVE)
+
+    var lastError: String = ""
+        private set
 
     data class VideoInfo(
         val bvid: String,
@@ -45,102 +52,113 @@ object BiliParser {
         val qualityDesc: String
     )
 
-    /**
-     * 从输入中提取 BV 号
-     */
     fun extractBvid(input: String): String? {
-        val bvPattern = Regex("BV[0-9A-Za-z]{10}")
-        return bvPattern.find(input)?.value
+        val bvMatcher = BV_PATTERN.matcher(input)
+        if (bvMatcher.find()) return bvMatcher.group(1)
+
+        val avMatcher = AV_PATTERN.matcher(input)
+        if (avMatcher.find()) return "av" + avMatcher.group(1)
+
+        val b23Matcher = B23_PATTERN.matcher(input)
+        if (b23Matcher.find()) {
+            val redirect = getRedirectUrl(b23Matcher.group())
+            extractBvid(redirect)?.let { return it }
+        }
+
+        val biliMatcher = BILI_URL_PATTERN.matcher(input)
+        if (biliMatcher.find()) return extractBvid(biliMatcher.group())
+
+        return null
     }
 
-    /**
-     * 获取视频信息
-     */
-    fun getVideoInfo(bvid: String): VideoInfo? {
+    fun getVideoInfo(input: String): VideoInfo? {
         return try {
-            val url = "https://api.bilibili.com/x/web-interface/view?bvid=$bvid"
-            val response = httpGet(url) ?: return null
-            val json = JSONObject(response)
-
-            if (json.optInt("code", -1) != 0) return null
-
-            val data = json.getJSONObject("data")
-            val owner = data.getJSONObject("owner")
-            val pagesArray = data.getJSONArray("pages")
-            val pages = mutableListOf<PageInfo>()
-
-            for (i in 0 until pagesArray.length()) {
-                val p = pagesArray.getJSONObject(i)
-                pages.add(
-                    PageInfo(
-                        cid = p.optLong("cid", 0),
-                        page = p.optInt("page", 0),
-                        part = p.optString("part", ""),
-                        duration = p.optInt("duration", 0)
-                    )
-                )
+            val videoId = extractBvid(input) ?: run {
+                lastError = "无法识别BV/AV号"
+                return null
             }
 
+            val query = if (videoId.startsWith("BV")) {
+                "bvid=" + URLEncoder.encode(videoId, "UTF-8")
+            } else {
+                "aid=" + URLEncoder.encode(videoId.substring(2), "UTF-8")
+            }
+
+            val response = httpGet(VIEW_API + query) ?: run {
+                lastError = "网络请求失败"
+                return null
+            }
+            val json = JSONObject(response)
+
+            if (json.optInt("code", -1) != 0) {
+                lastError = json.optString("message", "code=${json.optInt("code")}")
+                return null
+            }
+
+            val data = json.optJSONObject("data") ?: run {
+                lastError = "无 data 字段"
+                return null
+            }
+
+            val owner = data.optJSONObject("owner")
+            val pagesArray = data.optJSONArray("pages")
+            val pages = mutableListOf<PageInfo>()
+
+            if (pagesArray != null) {
+                for (i in 0 until pagesArray.length()) {
+                    val p = pagesArray.optJSONObject(i) ?: continue
+                    pages.add(
+                        PageInfo(
+                            cid = p.optLong("cid", 0),
+                            page = p.optInt("page", 0),
+                            part = p.optString("part", ""),
+                            duration = p.optInt("duration", 0)
+                        )
+                    )
+                }
+            }
+
+            var cover = data.optString("pic", "")
+            if (cover.startsWith("http://")) cover = "https://" + cover.substring(7)
+
             VideoInfo(
-                bvid = data.optString("bvid", bvid),
+                bvid = data.optString("bvid", videoId),
                 aid = data.optLong("aid", 0),
                 title = data.optString("title", ""),
                 desc = data.optString("desc", ""),
-                owner = owner.optString("name", ""),
-                cover = data.optString("pic", ""),
+                owner = owner?.optString("name", "") ?: "",
+                cover = cover,
                 duration = data.optInt("duration", 0),
                 cid = data.optLong("cid", 0),
                 pages = pages
             )
         } catch (e: Exception) {
+            lastError = e.message ?: "未知错误"
             e.printStackTrace()
             null
         }
     }
 
-    /**
-     * 获取播放地址（DASH格式，视频和音频分离）
-     * 需要 wbi 签名
-     */
     fun getPlayUrl(bvid: String, cid: Long, qn: Int = 64): PlayUrl? {
         return try {
-            val params = mutableMapOf(
-                "bvid" to bvid,
-                "cid" to cid.toString(),
-                "qn" to qn.toString(),
-                "fnval" to "16",
-                "fnver" to "0",
-                "fourk" to "1"
-            )
-
-            val signedParams = signWbi(params)
-            val query = signedParams.entries.joinToString("&") {
-                "${URLEncoder.encode(it.key, "UTF-8")}=${URLEncoder.encode(it.value, "UTF-8")}"
+            val api = "$PLAY_API&bvid=${URLEncoder.encode(bvid, "UTF-8")}&cid=$cid&qn=$qn"
+            val response = httpGet(api) ?: run {
+                lastError = "播放地址请求失败"
+                return null
             }
-            val url = "https://api.bilibili.com/x/player/playurl?$query"
-            val response = httpGet(url) ?: return null
             val json = JSONObject(response)
 
-            if (json.optInt("code", -1) != 0) return null
+            if (json.optInt("code", -1) != 0) {
+                lastError = json.optString("message", "playurl code=${json.optInt("code")}")
+                return null
+            }
 
-            val data = json.getJSONObject("data")
+            val data = json.optJSONObject("data") ?: return null
             val dash = data.optJSONObject("dash")
 
             if (dash != null) {
-                // DASH 格式
-                val videoArray = dash.optJSONArray("video")
-                val audioArray = dash.optJSONArray("audio")
-
-                var videoUrl = ""
-                var audioUrl = ""
-
-                if (videoArray != null && videoArray.length() > 0) {
-                    // 取第一个（最高清晰度）
-                    videoUrl = videoArray.getJSONObject(0).optString("baseUrl", "")
-                }
-                if (audioArray != null && audioArray.length() > 0) {
-                    audioUrl = audioArray.getJSONObject(0).optString("baseUrl", "")
-                }
+                val videoUrl = pickBestStreamUrl(dash.optJSONArray("video"))
+                val audioUrl = pickBestStreamUrl(dash.optJSONArray("audio"))
 
                 if (videoUrl.isNotEmpty()) {
                     return PlayUrl(
@@ -152,7 +170,6 @@ object BiliParser {
                 }
             }
 
-            // 回退：durl 格式（旧版）
             val durl = data.optJSONArray("durl")
             if (durl != null && durl.length() > 0) {
                 val videoUrl = durl.getJSONObject(0).optString("url", "")
@@ -166,64 +183,92 @@ object BiliParser {
                 }
             }
 
+            lastError = "无可用播放流"
             null
         } catch (e: Exception) {
+            lastError = e.message ?: "未知错误"
             e.printStackTrace()
             null
         }
     }
 
-    /**
-     * wbi 签名
-     */
-    private fun signWbi(params: Map<String, String>): Map<String, String> {
+    fun getDirectPlayUrl(bvid: String, cid: Long, qn: Int = 64): PlayUrl? {
         return try {
-            val mixinKey = getMixinKey()
-            val wts = (System.currentTimeMillis() / 1000).toString()
-
-            val signedParams = params.toMutableMap()
-            signedParams["wts"] = wts
-
-            // 排序并拼接
-            val query = signedParams.entries.sortedBy { it.key }.joinToString("&") {
-                "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}"
-            }
-
-            val wRid = md5(query + mixinKey)
-            signedParams["w_rid"] = wRid
-            signedParams
-        } catch (_: Exception) {
-            params
-        }
-    }
-
-    /**
-     * 获取 wbi mixin key
-     */
-    private fun getMixinKey(): String {
-        return try {
-            val response = httpGet("https://api.bilibili.com/x/web-interface/nav") ?: return ""
+            val api = "https://api.bilibili.com/x/player/playurl?fnval=0&fnver=0&fourk=1" +
+                    "&bvid=${URLEncoder.encode(bvid, "UTF-8")}&cid=$cid&qn=$qn"
+            val response = httpGet(api) ?: return null
             val json = JSONObject(response)
-            val wbiImg = json.optJSONObject("data")?.optJSONObject("wbi_img") ?: return ""
+            if (json.optInt("code", -1) != 0) return null
 
-            val imgUrl = wbiImg.optString("img_url", "")
-            val subUrl = wbiImg.optString("sub_url", "")
-
-            val imgKey = imgUrl.substringAfterLast("/").substringBefore(".")
-            val subKey = subUrl.substringAfterLast("/").substringBefore(".")
-
-            val orig = imgKey + subKey
-            val mixinKey = MIXIN_KEY_ENC_TAB.map { orig[it] }.joinToString("").take(32)
-            mixinKey
+            val data = json.optJSONObject("data") ?: return null
+            val durl = data.optJSONArray("durl")
+            if (durl != null && durl.length() > 0) {
+                val videoUrl = durl.getJSONObject(0).optString("url", "")
+                if (videoUrl.isNotEmpty()) {
+                    return PlayUrl(
+                        videoUrl = videoUrl,
+                        audioUrl = "",
+                        quality = data.optInt("quality", qn),
+                        qualityDesc = data.optString("quality_desc", "")
+                    )
+                }
+            }
+            null
         } catch (_: Exception) {
-            ""
+            null
         }
     }
 
-    private fun md5(input: String): String {
-        val md = MessageDigest.getInstance("MD5")
-        val digest = md.digest(input.toByteArray())
-        return digest.joinToString("") { "%02x".format(it) }
+    private fun pickBestStreamUrl(array: org.json.JSONArray?): String {
+        if (array == null || array.length() == 0) return ""
+
+        var bestUrl = ""
+        var maxBandwidth = -1
+
+        for (i in 0 until array.length()) {
+            val stream = array.optJSONObject(i) ?: continue
+            val bandwidth = stream.optInt("bandwidth", 0)
+            var url = stream.optString("base_url", "")
+            if (url.isEmpty()) url = stream.optString("baseUrl", "")
+
+            if (url.isNotEmpty() && (bestUrl.isEmpty() || bandwidth > maxBandwidth)) {
+                bestUrl = url
+                maxBandwidth = bandwidth
+            }
+        }
+
+        if (bestUrl.isEmpty()) {
+            for (i in 0 until array.length()) {
+                val stream = array.optJSONObject(i) ?: continue
+                val backup = stream.optJSONArray("backup_url")
+                if (backup != null && backup.length() > 0) return backup.optString(0, "")
+            }
+        }
+
+        return bestUrl
+    }
+
+    private fun getRedirectUrl(urlStr: String): String {
+        return try {
+            val url = URL(urlStr)
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.instanceFollowRedirects = false
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            conn.setRequestProperty("User-Agent", UA)
+            val code = conn.responseCode
+            if (code == 301 || code == 302 || code == 307 || code == 308) {
+                val location = conn.getHeaderField("Location")
+                conn.disconnect()
+                location ?: urlStr
+            } else {
+                conn.disconnect()
+                urlStr
+            }
+        } catch (_: Exception) {
+            urlStr
+        }
     }
 
     private fun httpGet(urlStr: String): String? {
@@ -231,27 +276,24 @@ object BiliParser {
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
+            conn.connectTimeout = 15000
+            conn.readTimeout = 20000
+            conn.instanceFollowRedirects = true
             conn.setRequestProperty("User-Agent", UA)
             conn.setRequestProperty("Referer", REFERER)
-            conn.connectTimeout = 10000
-            conn.readTimeout = 10000
+            conn.setRequestProperty("Origin", ORIGIN)
+            conn.setRequestProperty("Accept", "application/json, text/plain, */*")
 
-            if (conn.responseCode != 200) {
-                conn.disconnect()
-                return null
-            }
-
-            val response = conn.inputStream.bufferedReader().use { it.readText() }
+            val code = conn.responseCode
+            val inputStream = if (code in 200..399) conn.inputStream else conn.errorStream
+            val response = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
             conn.disconnect()
-            response
+            if (code in 200..399) response else null
         } catch (_: Exception) {
             null
         }
     }
 
-    /**
-     * 格式化时长（秒 -> mm:ss）
-     */
     fun formatDuration(seconds: Int): String {
         val m = seconds / 60
         val s = seconds % 60

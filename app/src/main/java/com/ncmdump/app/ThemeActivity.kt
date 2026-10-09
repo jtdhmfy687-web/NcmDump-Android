@@ -1,0 +1,186 @@
+package com.ncmdump.app
+
+import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Bundle
+import android.view.View
+import android.widget.Button
+import android.widget.SeekBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
+
+class ThemeActivity : AppCompatActivity() {
+
+    private lateinit var prefs: SharedPreferences
+
+    private lateinit var btnThemeLight: Button
+    private lateinit var btnThemeDark: Button
+    private lateinit var btnThemeSystem: Button
+    private lateinit var seekCardOpacity: SeekBar
+    private lateinit var tvCardOpacity: TextView
+    private lateinit var switchBlur: SwitchCompat
+    private lateinit var switchCustomBg: SwitchCompat
+    private lateinit var btnSelectBg: Button
+    private lateinit var btnResetBg: Button
+
+    private val pickBackground = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            try {
+                contentResolver.takePersistableUriPermission(
+                    it,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            prefs.edit().putString("custom_background", it.toString()).apply()
+            switchCustomBg.isChecked = true
+            Toast.makeText(this, "背景已设置", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_theme)
+
+        supportActionBar?.title = "主题设置"
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+
+        prefs = getSharedPreferences("ncmdump", MODE_PRIVATE)
+
+        btnThemeLight = findViewById(R.id.btnThemeLight)
+        btnThemeDark = findViewById(R.id.btnThemeDark)
+        btnThemeSystem = findViewById(R.id.btnThemeSystem)
+        seekCardOpacity = findViewById(R.id.seekCardOpacity)
+        tvCardOpacity = findViewById(R.id.tvCardOpacity)
+        switchBlur = findViewById(R.id.switchBlur)
+        switchCustomBg = findViewById(R.id.switchCustomBg)
+        btnSelectBg = findViewById(R.id.btnSelectBg)
+        btnResetBg = findViewById(R.id.btnResetBg)
+
+        loadSettings()
+        applyCustomBackground()
+
+        btnThemeLight.setOnClickListener { setThemeMode("light") }
+        btnThemeDark.setOnClickListener { setThemeMode("dark") }
+        btnThemeSystem.setOnClickListener { setThemeMode("system") }
+
+        findViewById<View>(R.id.colorPurple).setOnClickListener { setThemeColor("purple") }
+        findViewById<View>(R.id.colorBlue).setOnClickListener { setThemeColor("blue") }
+        findViewById<View>(R.id.colorGreen).setOnClickListener { setThemeColor("green") }
+        findViewById<View>(R.id.colorPink).setOnClickListener { setThemeColor("pink") }
+        findViewById<View>(R.id.colorOrange).setOnClickListener { setThemeColor("orange") }
+
+        seekCardOpacity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                tvCardOpacity.text = "$progress%"
+                prefs.edit().putInt("card_opacity", progress).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        switchBlur.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("enable_blur", isChecked).apply()
+        }
+
+        switchCustomBg.setOnCheckedChangeListener { _, isChecked ->
+            if (!isChecked) {
+                prefs.edit().remove("custom_background").apply()
+            }
+        }
+
+        btnSelectBg.setOnClickListener {
+            try { pickBackground.launch(arrayOf("image/*")) }
+            catch (e: Exception) { Toast.makeText(this, "打开选择器失败", Toast.LENGTH_SHORT).show() }
+        }
+
+        btnResetBg.setOnClickListener {
+            prefs.edit().remove("custom_background").apply()
+            switchCustomBg.isChecked = false
+            Toast.makeText(this, "已恢复默认背景", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun loadSettings() {
+        when (prefs.getString("theme_mode", "system")) {
+            "light" -> highlightThemeButton(btnThemeLight)
+            "dark" -> highlightThemeButton(btnThemeDark)
+            else -> highlightThemeButton(btnThemeSystem)
+        }
+
+        val opacity = prefs.getInt("card_opacity", 88)
+        seekCardOpacity.progress = opacity
+        tvCardOpacity.text = "$opacity%"
+
+        switchBlur.isChecked = prefs.getBoolean("enable_blur", false)
+
+        val hasBg = prefs.getString("custom_background", "").isNullOrEmpty().not()
+        switchCustomBg.isChecked = hasBg
+    }
+
+    private fun setThemeMode(mode: String) {
+        prefs.edit().putString("theme_mode", mode).apply()
+        when (mode) {
+            "light" -> highlightThemeButton(btnThemeLight)
+            "dark" -> highlightThemeButton(btnThemeDark)
+            else -> highlightThemeButton(btnThemeSystem)
+        }
+    }
+
+    private fun highlightThemeButton(active: Button) {
+        listOf(btnThemeLight, btnThemeDark, btnThemeSystem).forEach { btn ->
+            if (btn == active) {
+                btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getColor(R.color.primary)))
+                btn.setTextColor(getColor(android.R.color.white))
+            } else {
+                btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getColor(R.color.bg_button)))
+                btn.setTextColor(getColor(R.color.text_primary))
+            }
+        }
+    }
+
+    private fun setThemeColor(color: String) {
+        prefs.edit().putString("theme_color", color).apply()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyCustomBackground()
+    }
+
+    private fun applyCustomBackground() {
+        val bgUriStr = prefs.getString("custom_background", "")
+        val maskAlpha = 0
+        val rootView = findViewById<View>(android.R.id.content)
+
+        if (!bgUriStr.isNullOrEmpty()) {
+            try {
+                val uri = Uri.parse(bgUriStr)
+                val inputStream = contentResolver.openInputStream(uri)
+                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                if (bitmap != null) {
+                    rootView.background = android.graphics.drawable.BitmapDrawable(resources, bitmap)
+                    rootView.foreground = android.graphics.drawable.ColorDrawable(
+                        android.graphics.Color.argb(maskAlpha, 255, 255, 255)
+                    )
+                }
+            } catch (_: Exception) {
+                rootView.setBackgroundResource(R.color.bg_main)
+                rootView.foreground = null
+            }
+        } else {
+            rootView.setBackgroundResource(R.color.bg_main)
+            rootView.foreground = null
+        }
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        finish()
+        return true
+    }
+}

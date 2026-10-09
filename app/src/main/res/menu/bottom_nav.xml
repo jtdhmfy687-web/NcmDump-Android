@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_audio"
+        android:icon="@drawable/ic_audio"
+        android:title="音频处理" />
+    <item
+        android:id="@+id/nav_video"
+        android:icon="@drawable/ic_video"
+        android:title="视频处理" />
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@drawable/ic_settings"
+        android:title="设置" />
+</menu>

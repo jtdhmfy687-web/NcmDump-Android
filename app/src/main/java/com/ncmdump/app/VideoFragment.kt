@@ -6,17 +6,20 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.fragment.app.Fragment
 import kotlin.concurrent.thread
 import java.net.URL
 
-class BiliActivity : AppCompatActivity() {
+class VideoFragment : Fragment() {
 
     private lateinit var etBvid: EditText
     private lateinit var btnParse: Button
@@ -37,54 +40,50 @@ class BiliActivity : AppCompatActivity() {
     private var currentVideoInfo: BiliParser.VideoInfo? = null
     private var currentPlayUrl: BiliParser.PlayUrl? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_bili)
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
+    ): View? {
+        return inflater.inflate(R.layout.fragment_video, container, false)
+    }
 
-        supportActionBar?.title = "B站视频解析"
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
-        etBvid = findViewById(R.id.etBvid)
-        btnParse = findViewById(R.id.btnParse)
-        btnGetPlayUrl = findViewById(R.id.btnGetPlayUrl)
-        btnPlayInline = findViewById(R.id.btnPlayInline)
-        btnCopyVideoUrl = findViewById(R.id.btnCopyVideoUrl)
-        btnCopyAudioUrl = findViewById(R.id.btnCopyAudioUrl)
-        tvBiliStatus = findViewById(R.id.tvBiliStatus)
-        tvTitle = findViewById(R.id.tvTitle)
-        tvOwner = findViewById(R.id.tvOwner)
-        tvDuration = findViewById(R.id.tvDuration)
-        tvDesc = findViewById(R.id.tvDesc)
-        tvPages = findViewById(R.id.tvPages)
-        ivCover = findViewById(R.id.ivCover)
-        cardVideoInfo = findViewById(R.id.cardVideoInfo)
-        cardPages = findViewById(R.id.cardPages)
+        etBvid = view.findViewById(R.id.etBvid)
+        btnParse = view.findViewById(R.id.btnParse)
+        btnGetPlayUrl = view.findViewById(R.id.btnGetPlayUrl)
+        btnPlayInline = view.findViewById(R.id.btnPlayInline)
+        btnCopyVideoUrl = view.findViewById(R.id.btnCopyVideoUrl)
+        btnCopyAudioUrl = view.findViewById(R.id.btnCopyAudioUrl)
+        tvBiliStatus = view.findViewById(R.id.tvBiliStatus)
+        tvTitle = view.findViewById(R.id.tvTitle)
+        tvOwner = view.findViewById(R.id.tvOwner)
+        tvDuration = view.findViewById(R.id.tvDuration)
+        tvDesc = view.findViewById(R.id.tvDesc)
+        tvPages = view.findViewById(R.id.tvPages)
+        ivCover = view.findViewById(R.id.ivCover)
+        cardVideoInfo = view.findViewById(R.id.cardVideoInfo)
+        cardPages = view.findViewById(R.id.cardPages)
 
         btnParse.setOnClickListener {
             val input = etBvid.text.toString().trim()
             if (input.isEmpty()) {
-                Toast.makeText(this, "请输入BV号或链接", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "请输入BV号或链接", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             parseVideo(input)
         }
 
         btnGetPlayUrl.setOnClickListener {
-            currentVideoInfo?.let { info ->
-                fetchPlayUrl(info.bvid, info.cid)
-            }
+            currentVideoInfo?.let { info -> fetchPlayUrl(info.bvid, info.cid) }
         }
 
         btnPlayInline.setOnClickListener {
-            currentVideoInfo?.let { info ->
-                playInline(info.bvid, info.cid, info.title)
-            }
+            currentVideoInfo?.let { info -> playInline(info.bvid, info.cid, info.title) }
         }
 
         btnCopyVideoUrl.setOnClickListener {
-            currentPlayUrl?.let {
-                copyToClipboard("视频流地址", it.videoUrl)
-            }
+            currentPlayUrl?.let { copyToClipboard("视频流地址", it.videoUrl) }
         }
 
         btnCopyAudioUrl.setOnClickListener {
@@ -92,32 +91,35 @@ class BiliActivity : AppCompatActivity() {
                 if (it.audioUrl.isNotEmpty()) {
                     copyToClipboard("音频流地址", it.audioUrl)
                 } else {
-                    Toast.makeText(this, "该视频无独立音频流", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "该视频无独立音频流", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
-    }
-
     private fun parseVideo(input: String) {
-        val bvid = BiliParser.extractBvid(input)
-        if (bvid == null) {
-            tvBiliStatus.text = "无法识别BV号，请检查输入"
-            return
-        }
-
-        tvBiliStatus.text = "正在解析: $bvid"
+        tvBiliStatus.text = "正在解析..."
         btnParse.isEnabled = false
         cardVideoInfo.visibility = CardView.GONE
         cardPages.visibility = CardView.GONE
 
         thread {
+            // extractBvid 可能涉及网络请求（b23.tv 重定向），必须在子线程
+            val bvid = BiliParser.extractBvid(input)
+            if (bvid == null) {
+                requireActivity().runOnUiThread {
+                    btnParse.isEnabled = true
+                    tvBiliStatus.text = "无法识别BV号，请检查输入"
+                }
+                return@thread
+            }
+
+            requireActivity().runOnUiThread {
+                tvBiliStatus.text = "正在解析: $bvid"
+            }
+
             val info = BiliParser.getVideoInfo(bvid)
-            runOnUiThread {
+            requireActivity().runOnUiThread {
                 btnParse.isEnabled = true
                 if (info != null) {
                     currentVideoInfo = info
@@ -138,20 +140,16 @@ class BiliActivity : AppCompatActivity() {
         tvDuration.text = "时长: ${BiliParser.formatDuration(info.duration)}  |  BV: ${info.bvid}"
         tvDesc.text = info.desc.ifEmpty { "暂无简介" }
 
-        // 加载封面
         thread {
             try {
                 val url = URL(info.cover)
                 val bitmap = BitmapFactory.decodeStream(url.openStream())
-                runOnUiThread {
-                    if (bitmap != null) {
-                        ivCover.setImageBitmap(bitmap)
-                    }
+                requireActivity().runOnUiThread {
+                    if (bitmap != null) ivCover.setImageBitmap(bitmap)
                 }
             } catch (_: Exception) {}
         }
 
-        // 分P列表
         if (info.pages.size > 1) {
             cardPages.visibility = CardView.VISIBLE
             val sb = StringBuilder()
@@ -161,7 +159,6 @@ class BiliActivity : AppCompatActivity() {
             tvPages.text = sb.toString().trimEnd()
         }
 
-        // 重置播放地址按钮
         btnCopyVideoUrl.visibility = Button.GONE
         btnCopyAudioUrl.visibility = Button.GONE
         currentPlayUrl = null
@@ -173,7 +170,7 @@ class BiliActivity : AppCompatActivity() {
 
         thread {
             val playUrl = BiliParser.getPlayUrl(bvid, cid)
-            runOnUiThread {
+            requireActivity().runOnUiThread {
                 btnGetPlayUrl.isEnabled = true
                 if (playUrl != null) {
                     currentPlayUrl = playUrl
@@ -190,8 +187,7 @@ class BiliActivity : AppCompatActivity() {
     }
 
     private fun playInline(bvid: String, cid: Long, title: String) {
-        // 直接跳转到播放器，用B站官方嵌入式WebView播放
-        val intent = Intent(this, PlayerActivity::class.java).apply {
+        val intent = Intent(requireContext(), PlayerActivity::class.java).apply {
             putExtra("bvid", bvid)
             putExtra("cid", cid)
             putExtra("video_title", title)
@@ -200,9 +196,9 @@ class BiliActivity : AppCompatActivity() {
     }
 
     private fun copyToClipboard(label: String, text: String) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText(label, text)
         clipboard.setPrimaryClip(clip)
-        Toast.makeText(this, "$label 已复制", Toast.LENGTH_SHORT).show()
+        Toast.makeText(requireContext(), "$label 已复制", Toast.LENGTH_SHORT).show()
     }
 }

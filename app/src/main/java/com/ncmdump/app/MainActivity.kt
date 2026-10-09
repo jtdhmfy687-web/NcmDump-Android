@@ -1,413 +1,250 @@
 package com.ncmdump.app
 
-import android.Manifest
-import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.DocumentsContract
-import android.provider.OpenableColumns
-import android.provider.Settings
 import android.view.View
-import android.widget.Button
-import android.widget.ProgressBar
-import android.widget.TextView
-import android.widget.Toast
+import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import kotlin.concurrent.thread
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.cardview.widget.CardView
+import androidx.fragment.app.Fragment
+import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var btnSelect: Button
-    private lateinit var btnSelectDir: Button
-    private lateinit var btnDecrypt: Button
-    private lateinit var btnGrantPermission: Button
-    private lateinit var btnBili: Button
-    private lateinit var tvStatus: TextView
-    private lateinit var tvFileList: TextView
-    private lateinit var tvPermissionHint: TextView
-    private lateinit var progressBar: ProgressBar
-    private lateinit var layoutControls: View
-    private lateinit var cardPermission: View
-
+    private lateinit var bottomNav: BottomNavigationView
+    private lateinit var rootView: View
     private lateinit var prefs: SharedPreferences
 
-    private val selectedFiles = mutableListOf<Uri>()
-    private var outputDirUri: Uri? = null
-    private var lastOutputPath: String = ""
+    private val audioFragment = AudioFragment()
+    private val videoFragment = VideoFragment()
+    private val settingsFragment = SettingsFragment()
 
-    // 选择多个 ncm 文件
+    // 记录当前应用的主题设置，用于检测变化
+    private var currentThemeMode: String = "system"
+
     private val pickFiles = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
-            selectedFiles.clear()
-            selectedFiles.addAll(uris)
-            updateFileList()
+            (currentFragment as? AudioFragment)?.onFilesSelected(uris)
         }
     }
 
-    // 选择输出目录
     private val pickDir = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let {
+            (currentFragment as? AudioFragment)?.onDirSelected(it)
+        }
+    }
+
+    private val pickBackground = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let {
             try {
                 contentResolver.takePersistableUriPermission(
                     it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (_: Exception) {}
-            outputDirUri = it
-            // 同时保存 Uri 字符串和真实路径
-            val path = resolveTreeUriToPath(it)
-            val editor = prefs.edit()
-            editor.putString("last_output_uri", it.toString())
-            if (path.isNotEmpty()) {
-                lastOutputPath = path
-                editor.putString("last_output_dir", path)
-            }
-            editor.apply()
-            tvStatus.text = "输出目录: ${getDocumentFileName(it)}"
+            prefs.edit().putString("custom_background", it.toString()).apply()
+            applyCustomBackground()
         }
     }
 
-    // 传统存储权限申请（Android 10 及以下）
-    private val requestLegacyPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            onPermissionGranted()
-        } else {
-            Toast.makeText(this, "存储权限被拒绝，无法使用", Toast.LENGTH_LONG).show()
-        }
-    }
+    private val currentFragment: Fragment?
+        get() = supportFragmentManager.findFragmentById(R.id.fragmentContainer)
+
+    private var currentTabIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        prefs = getSharedPreferences("ncmdump", MODE_PRIVATE)
+        currentThemeMode = prefs.getString("theme_mode", "system") ?: "system"
+        applyThemeMode(currentThemeMode)
+
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        prefs = getSharedPreferences("ncmdump", MODE_PRIVATE)
-        lastOutputPath = prefs.getString("last_output_dir", "") ?: ""
-        // 恢复上次的输出目录 Uri
-        val savedUriStr = prefs.getString("last_output_uri", "")
-        if (!savedUriStr.isNullOrEmpty()) {
-            try {
-                outputDirUri = Uri.parse(savedUriStr)
-            } catch (_: Exception) {}
+        rootView = findViewById(android.R.id.content)
+        bottomNav = findViewById(R.id.bottomNav)
+
+        applyGlassEffect(bottomNav)
+        applyCardOpacity()
+
+        if (savedInstanceState == null) {
+            switchFragment(audioFragment, 0)
         }
 
-        btnSelect = findViewById(R.id.btnSelect)
-        btnSelectDir = findViewById(R.id.btnSelectDir)
-        btnDecrypt = findViewById(R.id.btnDecrypt)
-        btnGrantPermission = findViewById(R.id.btnGrantPermission)
-        btnBili = findViewById(R.id.btnBili)
-        tvStatus = findViewById(R.id.tvStatus)
-        tvFileList = findViewById(R.id.tvFileList)
-        tvPermissionHint = findViewById(R.id.tvPermissionHint)
-        progressBar = findViewById(R.id.progressBar)
-        layoutControls = findViewById(R.id.layoutControls)
-        cardPermission = findViewById(R.id.cardPermission)
-
-        btnGrantPermission.setOnClickListener {
-            requestAllFilesPermission()
-        }
-
-        btnBili.setOnClickListener {
-            startActivity(Intent(this, BiliActivity::class.java))
-        }
-
-        btnSelect.setOnClickListener {
-            if (!hasStoragePermission()) {
-                showPermissionRequired()
-                return@setOnClickListener
-            }
-            try {
-                pickFiles.launch(arrayOf("*/*"))
-            } catch (e: Exception) {
-                Toast.makeText(this, "打开文件选择器失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_audio -> { switchFragment(audioFragment, 0); true }
+                R.id.nav_video -> { switchFragment(videoFragment, 1); true }
+                R.id.nav_settings -> { switchFragment(settingsFragment, 2); true }
+                else -> false
             }
         }
 
-        btnSelectDir.setOnClickListener {
-            if (!hasStoragePermission()) {
-                showPermissionRequired()
-                return@setOnClickListener
-            }
-            try {
-                pickDir.launch(null)
-            } catch (e: Exception) {
-                Toast.makeText(this, "打开目录选择器失败: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        btnDecrypt.setOnClickListener {
-            if (!hasStoragePermission()) {
-                showPermissionRequired()
-                return@setOnClickListener
-            }
-            if (selectedFiles.isEmpty()) {
-                Toast.makeText(this, "请先选择 ncm 文件", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            startDecrypt()
-        }
-
-        checkPermissionAndInit()
+        applyCustomBackground()
     }
 
     override fun onResume() {
         super.onResume()
-        // 从设置页返回后重新检查权限
-        if (hasStoragePermission()) {
-            onPermissionGranted()
+        // 检测主题模式变化，变化则 recreate
+        val newMode = prefs.getString("theme_mode", "system") ?: "system"
+        if (newMode != currentThemeMode) {
+            currentThemeMode = newMode
+            recreate()
+            return
+        }
+        // 实时应用卡片不透明度、背景暗度、模糊
+        applyCardOpacity()
+        applyCustomBackground()
+        applyGlassEffect(bottomNav)
+    }
+
+    private fun applyThemeMode(mode: String) {
+        when (mode) {
+            "light" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+            "dark" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+            else -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         }
     }
 
-    private fun checkPermissionAndInit() {
-        if (hasStoragePermission()) {
-            onPermissionGranted()
+    private fun applyGlassEffect(view: View) {
+        val enableBlur = prefs.getBoolean("enable_blur", false)
+        view.elevation = 16f
+
+        if (enableBlur && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // 模糊只应用到背景，不模糊文字：用一个单独的背景 View
+            view.setBackgroundResource(R.drawable.bg_glass)
         } else {
-            showPermissionRequired()
+            view.setBackgroundResource(R.drawable.bg_glass)
         }
     }
 
     /**
-     * 检查是否有存储访问权限
-     * Android 11+ 检查 MANAGE_EXTERNAL_STORAGE，旧版检查 READ_EXTERNAL_STORAGE
+     * 实时应用卡片不透明度：遍历所有 CardView 修改背景
      */
-    private fun hasStoragePermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
+    private fun applyCardOpacity() {
+        val opacity = prefs.getInt("card_opacity", 88)
+        val alpha = (opacity * 255 / 100).coerceIn(0, 255)
+        // 基础卡片颜色 #EDE7F5，加上透明度
+        val cardColor = Color.argb(alpha, 0xED, 0xE7, 0xF5)
+
+        rootView.post {
+            findAllCardViews(rootView).forEach { cardView ->
+                cardView.setCardBackgroundColor(cardColor)
+            }
         }
     }
 
-    /**
-     * 申请所有文件访问权限
-     * Android 11+ 跳转到设置页，旧版直接申请运行时权限
-     */
-    private fun requestAllFilesPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+    private fun findAllCardViews(view: View): List<CardView> {
+        val result = mutableListOf<CardView>()
+        if (view is CardView) {
+            result.add(view)
+        }
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                result.addAll(findAllCardViews(view.getChildAt(i)))
+            }
+        }
+        return result
+    }
+
+    fun applyCustomBackground() {
+        val bgUri = getCustomBackgroundUri()
+        listOf(audioFragment, videoFragment, settingsFragment).forEach { fragment ->
+            if (fragment.isAdded) {
+                fragment.view?.let { view ->
+                    applyBackgroundToView(view, bgUri)
+                }
+            }
+        }
+    }
+
+    private fun applyBackgroundToView(view: View, bgUri: Uri?) {
+        val maskAlpha = 0
+
+        if (bgUri != null) {
             try {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                    data = Uri.parse("package:$packageName")
+                val inputStream = contentResolver.openInputStream(bgUri)
+                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                if (bitmap != null) {
+                    val drawable = android.graphics.drawable.BitmapDrawable(resources, bitmap)
+                    view.background = drawable
+                    view.foreground = android.graphics.drawable.ColorDrawable(
+                        Color.argb(maskAlpha, 255, 255, 255)
+                    )
                 }
-                startActivity(intent)
-            } catch (e: Exception) {
-                // 某些 ROM 不支持带包名的跳转，回退到通用设置页
-                try {
-                    startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                } catch (_: Exception) {
-                    Toast.makeText(this, "请在设置中手动开启所有文件访问权限", Toast.LENGTH_LONG).show()
-                }
+            } catch (_: Exception) {
+                view.setBackgroundResource(R.color.bg_main)
+                view.foreground = null
             }
         } else {
-            requestLegacyPermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+            view.setBackgroundResource(R.color.bg_main)
+            view.foreground = null
         }
     }
 
-    private fun showPermissionRequired() {
-        cardPermission.visibility = View.VISIBLE
-        layoutControls.visibility = View.GONE
-        tvPermissionHint.text = "需要「所有文件访问权限」才能读取和解密 ncm 文件\n\n请点击下方按钮，在设置中允许访问所有文件"
+    fun getCustomBackgroundUri(): Uri? {
+        val uriStr = prefs.getString("custom_background", "")
+        return if (!uriStr.isNullOrEmpty()) {
+            try { Uri.parse(uriStr) } catch (_: Exception) { null }
+        } else null
     }
 
-    private fun onPermissionGranted() {
-        cardPermission.visibility = View.GONE
-        layoutControls.visibility = View.VISIBLE
-        if (tvStatus.text.isNullOrEmpty() || tvStatus.text == "等待选择文件...") {
-            tvStatus.text = "权限已授予，请选择 ncm 文件"
+    fun clearCustomBackground() {
+        prefs.edit().remove("custom_background").apply()
+        applyCustomBackground()
+    }
+
+    fun openBackgroundPicker() {
+        try { pickBackground.launch(arrayOf("image/*")) }
+        catch (e: Exception) { e.printStackTrace() }
+    }
+
+    fun openFilePicker() {
+        try { pickFiles.launch(arrayOf("*/*")) }
+        catch (e: Exception) { e.printStackTrace() }
+    }
+
+    fun openDirPicker() {
+        try { pickDir.launch(null) }
+        catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun switchFragment(fragment: Fragment, targetIndex: Int) {
+        val transaction = supportFragmentManager.beginTransaction()
+        if (targetIndex > currentTabIndex) {
+            transaction.setCustomAnimations(R.anim.slide_in, R.anim.slide_out)
+        } else {
+            transaction.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right)
         }
-    }
+        currentTabIndex = targetIndex
 
-    private fun updateFileList() {
-        val sb = StringBuilder()
-        sb.append("已选择 ${selectedFiles.size} 个文件:\n\n")
-        selectedFiles.forEachIndexed { index, uri ->
-            sb.append("${index + 1}. ${getDocumentFileName(uri)}\n")
+        listOf(audioFragment, videoFragment, settingsFragment).forEach {
+            if (it.isAdded) transaction.hide(it)
         }
-        tvFileList.text = sb.toString()
-    }
+        if (fragment.isAdded) {
+            transaction.show(fragment)
+        } else {
+            transaction.add(R.id.fragmentContainer, fragment)
+        }
+        transaction.commit()
 
-    private fun getDocumentFileName(uri: Uri): String {
-        return try {
-            var name = ""
-            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (cursor.moveToFirst() && nameIndex >= 0) {
-                    name = cursor.getString(nameIndex)
-                }
+        rootView.post {
+            fragment.view?.let { view ->
+                applyBackgroundToView(view, getCustomBackgroundUri())
             }
-            name.ifEmpty { uri.lastPathSegment ?: "unknown" }
-        } catch (e: Exception) {
-            uri.lastPathSegment ?: "unknown"
-        }
-    }
-
-    /**
-     * 将 Uri 拷贝到应用私有缓存目录，获取真实路径供 JNI 层使用
-     */
-    private fun copyUriToCache(uri: Uri): String? {
-        val fileName = getDocumentFileName(uri)
-        val cacheFile = java.io.File(cacheDir, fileName)
-        return try {
-            contentResolver.openInputStream(uri)?.use { input ->
-                cacheFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            if (cacheFile.exists() && cacheFile.length() > 0) cacheFile.absolutePath else null
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun getOutputDirPath(): String {
-        val defaultDir = getExternalFilesDir(null)?.absolutePath ?: cacheDir.absolutePath
-
-        // 优先使用上次保存的输出目录
-        if (lastOutputPath.isNotEmpty()) {
-            val dir = java.io.File(lastOutputPath)
-            if (dir.exists() && dir.isDirectory) {
-                return lastOutputPath
-            }
-        }
-
-        // 兜底：用保存的 Uri 重新解析路径
-        outputDirUri?.let { uri ->
-            val path = resolveTreeUriToPath(uri)
-            if (path.isNotEmpty()) {
-                val dir = java.io.File(path)
-                if (dir.exists() && dir.isDirectory) {
-                    lastOutputPath = path
-                    return path
-                }
-            }
-        }
-
-        return defaultDir
-    }
-
-    /**
-     * 将 SAF Tree Uri 解析为真实文件路径
-     * 支持内置存储(primary:)和SD卡(xxxx-xxxx:)
-     */
-    private fun resolveTreeUriToPath(uri: Uri): String {
-        return try {
-            val docId = DocumentsContract.getTreeDocumentId(uri)
-            val colonIndex = docId.indexOf(':')
-            if (colonIndex < 0) return ""
-
-            val volume = docId.substring(0, colonIndex)
-            val relPath = docId.substring(colonIndex + 1)
-
-            when {
-                volume == "primary" -> {
-                    "${Environment.getExternalStorageDirectory()}/$relPath"
-                }
-                volume.matches(Regex("[A-F0-9]{4}-[A-F0-9]{4}")) -> {
-                    // SD 卡路径
-                    "/storage/$volume/$relPath"
-                }
-                else -> {
-                    // 尝试通用方式
-                    "/storage/$volume/$relPath"
-                }
-            }
-        } catch (_: Exception) {
-            ""
-        }
-    }
-
-    private fun startDecrypt() {
-        btnDecrypt.isEnabled = false
-        progressBar.progress = 0
-        progressBar.max = selectedFiles.size
-        tvStatus.text = "正在解密..."
-
-        thread {
-            val outputDir = getOutputDirPath()
-            var success = 0
-            var failed = 0
-
-            selectedFiles.forEachIndexed { index, uri ->
-                val cachePath = copyUriToCache(uri)
-                if (cachePath != null) {
-                    try {
-                        // 先获取元数据和封面（解密前从 ncm 文件读取）
-                        val metadataJson = NcmCrypt.getMetadata(cachePath)
-                        val coverBytes = NcmCrypt.getCoverImage(cachePath)
-                        val coverMime = NcmCrypt.getCoverMime(cachePath)
-
-                        val result = NcmCrypt.decrypt(cachePath, outputDir)
-                        if (result.isNotEmpty()) {
-                            // 后处理：元数据/封面/歌词（全部用 Throwable 捕获，防止 OOM 闪退）
-                            try {
-                                val json = org.json.JSONObject(metadataJson)
-                                val title = json.optString("name", "")
-                                val artist = json.optString("artist", "")
-                                val album = json.optString("album", "")
-
-                                // 封面过大时跳过写入（防止 OOM）
-                                val safeCover = if (coverBytes.size > 10 * 1024 * 1024) null else coverBytes
-
-                                try {
-                                    MetadataWriter.write(result, title, artist, album, safeCover, coverMime, null)
-                                } catch (_: Throwable) {}
-
-                                // 爬取歌词并单独生成 .lrc 文件
-                                try {
-                                    if (title.isNotEmpty()) {
-                                        val lyrics = LyricFetcher.fetchLyrics(title, artist)
-                                        if (!lyrics.isNullOrEmpty()) {
-                                            val audioFile = java.io.File(result)
-                                            val lrcName = audioFile.nameWithoutExtension + ".lrc"
-                                            val lrcFile = java.io.File(audioFile.parentFile, lrcName)
-                                            lrcFile.writeText(lyrics, Charsets.UTF_8)
-                                        }
-                                    }
-                                } catch (_: Throwable) {}
-                            } catch (_: Throwable) {}
-                            success++
-                        } else {
-                            failed++
-                        }
-                    } catch (e: UnsatisfiedLinkError) {
-                        failed++
-                        runOnUiThread {
-                            Toast.makeText(this@MainActivity, "原生库加载失败", Toast.LENGTH_SHORT).show()
-                        }
-                    } catch (e: Throwable) {
-                        failed++
-                    } finally {
-                        try {
-                            java.io.File(cachePath).delete()
-                        } catch (_: Exception) {}
-                    }
-                } else {
-                    failed++
-                }
-
-                runOnUiThread {
-                    progressBar.progress = index + 1
-                    tvStatus.text = "解密中... ${index + 1}/${selectedFiles.size}"
-                }
-            }
-
-            runOnUiThread {
-                btnDecrypt.isEnabled = true
-                tvStatus.text = "完成: 成功 $success, 失败 $failed\n输出到: $outputDir"
-                Toast.makeText(this@MainActivity, "解密完成", Toast.LENGTH_SHORT).show()
-            }
+            applyCardOpacity()
         }
     }
 }

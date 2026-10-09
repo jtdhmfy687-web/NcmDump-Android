@@ -11,8 +11,8 @@ android {
         applicationId "com.ncmdump.app"
         minSdk 24
         targetSdk 34
-        versionCode 6
-        versionName "1.4"
+        versionCode 18
+        versionName "1.5"
 
         externalNativeBuild {
             cmake {
@@ -58,7 +58,7 @@ android {
     // APK 输出文件名
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "网易云ncm解密-v${variant.versionName}.apk"
+            outputFileName = "解析tool-v${variant.versionName}.apk"
         }
     }
 }
@@ -70,4 +70,5 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.documentfile:documentfile:1.0.1'
     implementation 'net.jthink:jaudiotagger:3.0.1'
+    implementation 'io.github.maitrungduc1410:ffmpeg-kit-full:7.1.5'
 }

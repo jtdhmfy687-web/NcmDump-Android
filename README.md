@@ -1,4 +1,6 @@
-# 网易云ncm解密 - 多媒体工具箱
+# 解析tool - Analysis Tool
+
+NCM 解密 + 哔哩哔哩视频解析的 Android 多媒体工具箱。
 
 基于 ncmdump C++ 核心的 Android 图形化解密工具，附带哔哩哔哩视频解析功能。
 
