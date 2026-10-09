@@ -115,6 +115,7 @@ class AudioParseFragment : Fragment() {
             selectedFiles.clear()
             selectedFiles.addAll(uris)
             updateFileList()
+            tvStatus.text = "已选择 ${uris.size} 个文件，点击开始解密"
         }
     }
 

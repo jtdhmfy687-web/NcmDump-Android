@@ -63,18 +63,24 @@ class AudioFragment : Fragment() {
         return false
     }
 
+    // 获取当前可见的子Fragment
+    private fun getVisibleChild(): Fragment? {
+        return childFragmentManager.fragments.find { it.isVisible && it !is MenuFragment }
+    }
+
     // 宿主Activity回调：文件选择结果
     fun onFilesSelected(uris: List<Uri>) {
-        when (currentChild) {
-            is AudioParseFragment -> (currentChild as AudioParseFragment).onFilesSelected(uris)
-            is AudioConvertFragment -> uris.firstOrNull()?.let { (currentChild as AudioConvertFragment).onFileSelected(it) }
-            is AudioEditFragment -> (currentChild as AudioEditFragment).onFilesSelected(uris)
+        val child = getVisibleChild() ?: currentChild
+        when (child) {
+            is AudioParseFragment -> child.onFilesSelected(uris)
+            is AudioConvertFragment -> uris.firstOrNull()?.let { child.onFileSelected(it) }
         }
     }
 
     // 宿主Activity回调：目录选择结果
     fun onDirSelected(uri: Uri) {
-        (currentChild as? AudioParseFragment)?.onDirSelected(uri)
+        val child = getVisibleChild() ?: currentChild
+        (child as? AudioParseFragment)?.onDirSelected(uri)
     }
 
     // 菜单Fragment
@@ -92,9 +98,6 @@ class AudioFragment : Fragment() {
             }
             view.findViewById<LinearLayout>(R.id.menuConvert).setOnClickListener {
                 (parentFragment as AudioFragment).openChild(AudioConvertFragment())
-            }
-            view.findViewById<LinearLayout>(R.id.menuEdit).setOnClickListener {
-                (parentFragment as AudioFragment).openChild(AudioEditFragment())
             }
         }
     }

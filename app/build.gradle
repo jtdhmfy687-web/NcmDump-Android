@@ -11,8 +11,8 @@ android {
         applicationId "com.ncmdump.app"
         minSdk 24
         targetSdk 34
-        versionCode 19
-        versionName "1.5fix"
+        versionCode 21
+        versionName "1.7"
 
         externalNativeBuild {
             cmake {
@@ -58,7 +58,7 @@ android {
     // APK 输出文件名
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "解析tool-v${variant.versionName}.apk"
+            outputFileName = "MuLing-Tool-v${variant.versionName}.apk"
         }
     }
 }

@@ -78,6 +78,16 @@ class MainActivity : AppCompatActivity() {
         applyGlassEffect(bottomNav)
         applyCardOpacity()
 
+        // 返回键处理：先退出音频二级页面
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val audioFrag = supportFragmentManager.fragments.find { it is AudioFragment } as? AudioFragment
+                if (audioFrag != null && audioFrag.goBack()) return
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        })
+
         if (savedInstanceState == null) {
             switchFragment(audioFragment, 0)
         }
@@ -92,6 +102,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         applyCustomBackground()
+
+        // 自动检测更新
+        if (prefs.getBoolean("auto_update", true)) {
+            UpdateChecker.checkUpdate(this, showNoUpdate = false)
+        }
     }
 
     override fun onResume() {
