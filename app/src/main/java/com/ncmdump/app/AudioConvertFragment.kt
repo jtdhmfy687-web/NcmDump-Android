@@ -75,7 +75,18 @@ class AudioConvertFragment : Fragment() {
 
     fun onFileSelected(uri: Uri) {
         selectedFile = uri
-        tvFileList.text = "已选择: ${FileUtils.getFileName(requireContext(), uri)}"
+        if (view != null) {
+            tvFileList.text = "已选择: ${FileUtils.getFileName(requireContext(), uri)}"
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        selectedFile?.let {
+            if (view != null) {
+                tvFileList.text = "已选择: ${FileUtils.getFileName(requireContext(), it)}"
+            }
+        }
     }
 
     private fun startConvert(inputUri: Uri, format: String, bitrate: String) {

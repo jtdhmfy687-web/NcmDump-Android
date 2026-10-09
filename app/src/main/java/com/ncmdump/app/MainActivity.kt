@@ -32,7 +32,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
-            (currentFragment as? AudioFragment)?.onFilesSelected(uris)
+            audioFragment.onFilesSelected(uris)
         }
     }
 
@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let {
-            (currentFragment as? AudioFragment)?.onDirSelected(it)
+            audioFragment.onDirSelected(it)
         }
     }
 

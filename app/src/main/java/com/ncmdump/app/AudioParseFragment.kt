@@ -107,6 +107,11 @@ class AudioParseFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         if (hasStoragePermission()) onPermissionGranted()
+        // 恢复时刷新已选择文件的显示
+        if (selectedFiles.isNotEmpty() && view != null) {
+            updateFileList()
+            tvStatus.text = "已选择 ${selectedFiles.size} 个文件，点击开始解密"
+        }
     }
 
     // 宿主Activity回调：文件选择结果
@@ -114,8 +119,10 @@ class AudioParseFragment : Fragment() {
         if (uris.isNotEmpty()) {
             selectedFiles.clear()
             selectedFiles.addAll(uris)
-            updateFileList()
-            tvStatus.text = "已选择 ${uris.size} 个文件，点击开始解密"
+            if (view != null) {
+                updateFileList()
+                tvStatus.text = "已选择 ${uris.size} 个文件，点击开始解密"
+            }
         }
     }
 
